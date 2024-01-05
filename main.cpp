@@ -56,6 +56,7 @@ struct Tile
   CubeCoords cubeCoords;
   bool isWall;
   bool isTarget;
+  bool isPlayer;
 
   bool operator==(const Tile &b) const
   {
@@ -64,21 +65,6 @@ struct Tile
             cubeCoords.s == b.cubeCoords.s);
   }
 };
-
-namespace std
-{
-  template <>
-  struct hash<Tile>
-  {
-    size_t operator()(const Tile &h) const
-    {
-      hash<int> int_hash;
-      size_t hq = int_hash(h.cubeCoords.q);
-      size_t hr = int_hash(h.cubeCoords.r);
-      return hq ^ (hr + 0x9e3779b9 + (hq << 6) + (hq >> 2));
-    }
-  };
-}
 
 size_t myhash(const Tile &t)
 {
@@ -106,6 +92,26 @@ CubeCoords offsetToCube(int row, int col)
   int r = row;
 
   return CubeCoords(q, r);
+}
+
+CubeCoords round_fractional_hex(double q, double r)
+{
+  int c_q = int(round(q));
+  int c_r = int(round(r));
+  int s = int(round(-q - r));
+  double q_diff = abs(c_q - q);
+  double r_diff = abs(c_r - r);
+  double s_diff = abs(s - (-q - r));
+  if ((q_diff > r_diff) && (q_diff > s_diff))
+  {
+    c_q = -c_r - s;
+  }
+  else if (r_diff > s_diff)
+  {
+    c_r = -c_q - s;
+  }
+
+  return CubeCoords(c_q, c_r);
 }
 
 // The article says that the top, bottom, left, and right arguments are "offset coordinates"
@@ -139,7 +145,8 @@ int main(void)
   const int radius = 25;
   const int offset_x = 200;
   const int offset_y = 100;
-  auto map = createMap(-2, 1, -3, 3);
+  auto map = createMap(0, 6, 0, 6);
+  map[myhash(0, 0)].isPlayer = true;
 
   const Orientation pointy_orientation = Orientation(sqrt(3.0), sqrt(3.0) / 2.0, 0.0, 3.0 / 2.0,
                                                      sqrt(3.0) / 3.0, -1.0 / 3.0, 0.0, 2.0 / 3.0,
@@ -162,29 +169,11 @@ int main(void)
     if (IsMouseButtonDown(MOUSE_BUTTON_LEFT))
     {
       Vector2 mousePos = GetMousePosition();
-      float a_q = (sqrt(3) / 3 * (mousePos.x - offset_x) - (1.0 / 3.0 * (mousePos.y - offset_y))) / radius;
-      float a_r = (2.0 / 3.0) * (mousePos.y - offset_y) / radius;
+      double q = (sqrt(3) / 3 * (mousePos.x - offset_x) - (1.0 / 3.0 * (mousePos.y - offset_y))) / radius;
+      double r = (2.0 / 3.0) * (mousePos.y - offset_y) / radius;
 
-      int c_q = int(round(a_q));
-      int c_r = int(round(a_r));
-      int s = int(round(-a_q - a_r));
-      double q_diff = abs(c_q - a_q);
-      double r_diff = abs(c_r - a_r);
-      double s_diff = abs(s - (-a_q - a_r));
-      if ((q_diff > r_diff) && (q_diff > s_diff))
-      {
-        c_q = -c_r - s;
-      }
-      else if (r_diff > s_diff)
-      {
-        c_r = -c_q - s;
-      }
-      else
-      {
-        s = -c_q - c_r;
-      }
-
-      auto key = myhash(c_q, c_r);
+      auto cubeCoords = round_fractional_hex(q, r);
+      auto key = myhash(cubeCoords.q, cubeCoords.r);
 
       if (map.count(key) > 0)
       {
@@ -199,12 +188,15 @@ int main(void)
 
       if (tile.isWall)
       {
-
         DrawPoly((Vector2){hex_x + pointy_layout.origin.x, hex_y + pointy_layout.origin.y}, 6, 25, 30, RED);
+      }
+      else if (tile.isPlayer)
+      {
+        DrawPoly((Vector2){hex_x + pointy_layout.origin.x, hex_y + pointy_layout.origin.y}, 6, 25, 30, GREEN);
       }
       else
       {
-        DrawPolyLines((Vector2){hex_x + pointy_layout.origin.x, hex_y + pointy_layout.origin.y}, 6, 25, 30, BLUE);
+        DrawPolyLines((Vector2){hex_x + pointy_layout.origin.x, hex_y + pointy_layout.origin.y}, 6, 25, 30, BLACK);
       }
     }
 
