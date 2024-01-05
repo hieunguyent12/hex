@@ -1,6 +1,26 @@
 {
   "files.associations": {
     "array": "cpp",
-    "random": "cpp"
+    "random": "cpp",
+    "__hash_table": "cpp",
+    "__locale": "cpp",
+    "__threading_support": "cpp",
+    "bitset": "cpp",
+    "functional": "cpp",
+    "unordered_map": "cpp",
+    "unordered_set": "cpp",
+    "__hash": "cpp",
+    "hash_map": "cpp",
+    "memory": "cpp",
+    "optional": "cpp",
+    "string": "cpp",
+    "string_view": "cpp",
+    "system_error": "cpp",
+    "thread": "cpp",
+    "type_traits": "cpp",
+    "utility": "cpp",
+    "variant": "cpp",
+    "vector": "cpp",
+    "*.tcc": "cpp"
   }
 }

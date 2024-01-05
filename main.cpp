@@ -1,16 +1,49 @@
+// https://www.redblobgames.com/grids/hexagons/implementation.html#cpp
 #include "raylib.h"
 #include "math.h"
 #include <iostream>
 #include <array>
+#include <unordered_set>
+#include <unordered_map>
 
 template <typename T, std::size_t Row, std::size_t Col>
 using Array2D = std::array<std::array<T, Col>, Row>;
+
+struct Orientation
+{
+  const double f0, f1, f2, f3;
+  const double b0, b1, b2, b3;
+  const double start_angle; // in multiples of 60°
+  Orientation(double f0_, double f1_, double f2_, double f3_,
+              double b0_, double b1_, double b2_, double b3_,
+              double start_angle_)
+      : f0(f0_), f1(f1_), f2(f2_), f3(f3_),
+        b0(b0_), b1(b1_), b2(b2_), b3(b3_),
+        start_angle(start_angle_) {}
+};
+
+struct Layout
+{
+  Orientation orientation;
+  Vector2 size;
+  Vector2 origin;
+  Layout(Orientation orientation_, Vector2 size_, Vector2 origin_)
+      : orientation(orientation_), size(size_), origin(origin_) {}
+};
 
 struct CubeCoords
 {
   int q;
   int r;
   int s;
+
+  // default constructor
+  CubeCoords()
+  {
+    q = 0;
+    r = 0;
+    s = 0;
+  }
 
   CubeCoords(int _q, int _r) : q(_q), r(_r), s(-_q - _r)
   {
@@ -20,33 +53,80 @@ struct CubeCoords
 
 struct Tile
 {
-  Vector2 coords;
+  CubeCoords cubeCoords;
   bool isWall;
   bool isTarget;
-  CubeCoords cubeCoords;
+
+  bool operator==(const Tile &b) const
+  {
+    return (cubeCoords.q == b.cubeCoords.q &&
+            cubeCoords.r == b.cubeCoords.r &&
+            cubeCoords.s == b.cubeCoords.s);
+  }
 };
 
-void drawHex(const float x, const float y)
+namespace std
 {
-  DrawPolyLines((Vector2){x, y}, 6, 25, 30, BLUE);
+  template <>
+  struct hash<Tile>
+  {
+    size_t operator()(const Tile &h) const
+    {
+      hash<int> int_hash;
+      size_t hq = int_hash(h.cubeCoords.q);
+      size_t hr = int_hash(h.cubeCoords.r);
+      return hq ^ (hr + 0x9e3779b9 + (hq << 6) + (hq >> 2));
+    }
+  };
 }
 
-template <std::size_t Row, std::size_t Col>
-Array2D<Tile, Row, Col> createGrid()
+size_t myhash(const Tile &t)
 {
-  Array2D<Tile, Row, Col> g{};
+  std::hash<int> int_hash;
+  size_t hq = int_hash(t.cubeCoords.q);
+  size_t hr = int_hash(t.cubeCoords.r);
+  return hq ^ (hr + 0x9e3779b9 + (hq << 6) + (hq >> 2));
+}
 
-  for (auto i = 0; i < Row; i++)
-  {
-    for (auto j = 0; j < Col; j++)
+size_t myhash(int q, int r)
+{
+  std::hash<int> int_hash;
+  size_t hq = int_hash(q);
+  size_t hr = int_hash(r);
+  return hq ^ (hr + 0x9e3779b9 + (hq << 6) + (hq >> 2));
+}
+
+void cubeToOffset()
+{
+}
+
+CubeCoords offsetToCube(int row, int col)
+{
+  int q = col - int((row - (row & 1)) / 2);
+  int r = row;
+
+  return CubeCoords(q, r);
+}
+
+// The article says that the top, bottom, left, and right arguments are "offset coordinates"
+// but im unsure of what that means
+std::unordered_map<size_t, Tile> createMap(int top, int bottom, int left, int right)
+{
+  std::unordered_map<size_t, Tile> map;
+  for (int r = top; r <= bottom; r++)
+  {                                // pointy top
+    int r_offset = floor(r / 2.0); // or r>>1
+    for (int q = left - r_offset; q <= right - r_offset; q++)
     {
-      g[i][j] = {(Vector2){0, 0},
-                 false,
-                 false};
+      Tile t;
+      t.isTarget = false;
+      t.isWall = false;
+      t.cubeCoords = CubeCoords(q, r);
+      map[myhash(t)] = t;
     }
   }
 
-  return g;
+  return map;
 }
 
 int main(void)
@@ -57,14 +137,15 @@ int main(void)
   const int width = 8;
   const int height = 8;
   const int radius = 25;
-  const int offset_x = 25;
-  const int offset_y = 25;
-  // https://www.redblobgames.com/grids/hexagons/
-  const float horiz = sqrtf(3) * radius;
-  const float vert = (3.0 / 2.0) * radius;
-  auto grid = createGrid<width, height>();
-  float prevX = 0;
-  float prevY = 0;
+  const int offset_x = 200;
+  const int offset_y = 100;
+  auto map = createMap(-2, 1, -3, 3);
+
+  const Orientation pointy_orientation = Orientation(sqrt(3.0), sqrt(3.0) / 2.0, 0.0, 3.0 / 2.0,
+                                                     sqrt(3.0) / 3.0, -1.0 / 3.0, 0.0, 2.0 / 3.0,
+                                                     0.5);
+  const Layout pointy_layout = Layout(pointy_orientation, {radius, radius}, {offset_x, offset_y});
+  const Orientation &M = pointy_layout.orientation;
 
   InitWindow(screenWidth, screenHeight, "algorithm visualizer");
 
@@ -103,39 +184,30 @@ int main(void)
         s = -c_q - c_r;
       }
 
-      int col = c_q + int((c_r - (c_r & 1)) / 2);
-      int row = c_r;
+      auto key = myhash(c_q, c_r);
 
-      prevX = col;
-      prevY = row;
-
-      if (row < height && col < width)
+      if (map.count(key) > 0)
       {
-        grid[row][col].isWall = true;
+        map[key].isWall = true;
       }
     }
-    for (int row = 0; row < height; row++)
+
+    for (const auto &[_, tile] : map)
     {
-      for (int col = 0; col < width; col++)
-      {
-        Tile tile = grid[row][col];
-        float hex_x = row % 2 != 0 ? (col + 0.5) * horiz + offset_x : col * horiz + offset_x;
-        float hex_y = row * vert + offset_y;
-        tile.coords = {hex_x, hex_y};
+      float hex_x = (M.f0 * tile.cubeCoords.q + M.f1 * tile.cubeCoords.r) * pointy_layout.size.x;
+      float hex_y = (M.f2 * tile.cubeCoords.q + M.f3 * tile.cubeCoords.r) * pointy_layout.size.y;
 
-        if (tile.isWall)
-        {
-          DrawPoly((Vector2){hex_x, hex_y}, 6, 25, 30, RED);
-        }
-        else
-        {
-          DrawPolyLines((Vector2){hex_x, hex_y}, 6, 25, 30, BLUE);
-        }
+      if (tile.isWall)
+      {
+
+        DrawPoly((Vector2){hex_x + pointy_layout.origin.x, hex_y + pointy_layout.origin.y}, 6, 25, 30, RED);
+      }
+      else
+      {
+        DrawPolyLines((Vector2){hex_x + pointy_layout.origin.x, hex_y + pointy_layout.origin.y}, 6, 25, 30, BLUE);
       }
     }
-    DrawText(TextFormat("y: %02.02f", prevY), 200, 250, 20, BLACK);
-    DrawText(TextFormat("x: %f", prevX), 200, 200, 20, BLACK);
-    // DrawText(TextFormat("Mouse Position: %d %d", GetMouseX(), GetMouseY()), 200, 300, 20, BLACK);
+
     EndDrawing();
   }
 
