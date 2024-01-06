@@ -79,6 +79,7 @@ struct Tile
   bool isWall;
   bool isTarget;
   bool isPlayer;
+  bool isPath;
   bool reached;
 
   bool operator==(const Tile &b) const
@@ -200,13 +201,14 @@ int main(void)
   const int width = 8;
   const int height = 8;
   const int radius = 25;
-  // const int offset_x = 200;
-  // const int offset_y = 100;
-  const int offset_x = 400;
-  const int offset_y = 200;
+  const int offset_x = 200;
+  const int offset_y = 100;
+  // const int offset_x = 400;
+  // const int offset_y = 200;
   bool searching = false;
-  // auto map = createMap(0, 4, 0, 6);
-  auto map = createMap(-5, 5, -6, 6);
+  bool foundTarget = false;
+  auto map = createMap(0, 4, 0, 6);
+  // auto map = createMap(-5, 5, -6, 6);
 
   Tile &playerTile = map[myhash(0, 0)];
   Tile &targetTile = map[myhash(4, 4)];
@@ -221,12 +223,14 @@ int main(void)
 
   std::vector<Tile> queue{};
   std::unordered_set<Tile> reached{};
+  std::unordered_map<size_t, Tile> came_from{};
 
   queue.push_back(playerTile);
   reached.emplace(playerTile);
+  came_from[myhash(0, 0)] = {};
 
   InitWindow(screenWidth, screenHeight, "algorithm visualizer");
-  double tick_time = 0.1;
+  double tick_time = 0.05;
   double time = GetTime();
   SetTargetFPS(60); // Set our game to run at 60 frames-per-second
   //--------------------------------------------------------------------------------------
@@ -282,6 +286,10 @@ int main(void)
       {
         DrawPoly((Vector2){hex_x + pointy_layout.origin.x, hex_y + pointy_layout.origin.y}, 6, 25, 30, PURPLE);
       }
+      else if (tile.isPath)
+      {
+        DrawPoly((Vector2){hex_x + pointy_layout.origin.x, hex_y + pointy_layout.origin.y}, 6, 25, 30, LIME);
+      }
       else if (tile.reached)
       {
         DrawPoly((Vector2){hex_x + pointy_layout.origin.x, hex_y + pointy_layout.origin.y}, 6, 25, 30, ORANGE);
@@ -294,6 +302,7 @@ int main(void)
 
     if (searching)
     {
+      // only update the queue for new nodes to search only at certain interval so it doesn't go too fast.
       if (GetTime() >= time + tick_time)
       {
         time = GetTime();
@@ -304,14 +313,39 @@ int main(void)
           for (const auto &t_coords : current.neighbors(map))
           {
             Tile &tile = map[myhash(t_coords.q, t_coords.r)];
-            if (!reached.contains(tile))
+            if (came_from.count(myhash(tile.cubeCoords.q, tile.cubeCoords.r)) <= 0 && !tile.isWall)
             {
               queue.push_back(tile);
               reached.insert(tile);
               tile.reached = true;
+              came_from[myhash(tile.cubeCoords.q, tile.cubeCoords.r)] = current;
             }
           }
           queue.erase(queue.begin());
+        }
+        else
+        {
+          if (!foundTarget)
+          {
+            std::vector<Tile> path{};
+
+            size_t current = myhash(4, 4); // start from the target tile and go backwards from there
+            while (current != myhash(0, 0))
+            {
+              path.push_back(came_from[current]);
+              current = myhash(came_from[current].cubeCoords.q, came_from[current].cubeCoords.r);
+            }
+            foundTarget = true;
+
+            if (foundTarget)
+            {
+              for (const auto &t : path)
+              {
+                auto key = myhash(t.cubeCoords.q, t.cubeCoords.r);
+                map[key].isPath = true;
+              }
+            }
+          }
         }
       }
       for (const auto &tile : queue)
