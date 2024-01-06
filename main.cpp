@@ -5,6 +5,7 @@
 #include <array>
 #include <unordered_set>
 #include <unordered_map>
+#include <vector>
 
 template <typename T, std::size_t Row, std::size_t Col>
 using Array2D = std::array<std::array<T, Col>, Row>;
@@ -49,7 +50,30 @@ struct CubeCoords
   {
     assert(q + r + s == 0);
   }
+
+  CubeCoords(int _q, int _r, int _s) : q(_q), r(_r), s(_s)
+  {
+    assert(q + r + s == 0);
+  }
+
+  CubeCoords operator+(const CubeCoords &other)
+  {
+    return CubeCoords(q + other.q, r + other.r);
+  }
 };
+
+const std::array<CubeCoords, 6> NEIGHBORS_DIRECTIONS{
+    CubeCoords(0, -1, 1),
+    CubeCoords(1, -1, 0),
+    CubeCoords(1, 0, -1),
+    CubeCoords(0, 1, -1),
+    CubeCoords(-1, 1, 0),
+    CubeCoords(-1, 0, 1),
+};
+
+static int framesCounter = 0;
+
+size_t myhash(int q, int r);
 
 struct Tile
 {
@@ -57,6 +81,7 @@ struct Tile
   bool isWall;
   bool isTarget;
   bool isPlayer;
+  bool reached;
 
   bool operator==(const Tile &b) const
   {
@@ -64,7 +89,41 @@ struct Tile
             cubeCoords.r == b.cubeCoords.r &&
             cubeCoords.s == b.cubeCoords.s);
   }
+
+  // get adjacent neighbors of this tile
+  std::vector<CubeCoords> neighbors(std::unordered_map<size_t, Tile> &map)
+  {
+    std::vector<CubeCoords> n;
+
+    for (const auto &dir : NEIGHBORS_DIRECTIONS)
+    {
+      CubeCoords new_coords = cubeCoords + dir;
+      auto h = myhash(new_coords.q, new_coords.r);
+      // TODO: check if the coords are within the bounds, instead of checking of the tile exists in the map
+      if (map.count(h) > 0)
+      {
+        n.push_back(new_coords);
+      }
+    }
+
+    return n;
+  }
 };
+
+namespace std
+{
+  template <>
+  struct hash<Tile>
+  {
+    size_t operator()(const Tile &h) const
+    {
+      hash<int> int_hash;
+      size_t hq = int_hash(h.cubeCoords.q);
+      size_t hr = int_hash(h.cubeCoords.r);
+      return hq ^ (hr + 0x9e3779b9 + (hq << 6) + (hq >> 2));
+    }
+  };
+}
 
 size_t myhash(const Tile &t)
 {
@@ -145,17 +204,33 @@ int main(void)
   const int radius = 25;
   const int offset_x = 200;
   const int offset_y = 100;
-  auto map = createMap(0, 6, 0, 6);
-  map[myhash(0, 0)].isPlayer = true;
+  bool searching = false;
+  auto map = createMap(0, 4, 0, 6);
+
+  Tile &playerTile = map[myhash(0, 0)];
+  Tile &targetTile = map[myhash(4, 4)];
+  playerTile.isPlayer = true;
+  targetTile.isTarget = true;
 
   const Orientation pointy_orientation = Orientation(sqrt(3.0), sqrt(3.0) / 2.0, 0.0, 3.0 / 2.0,
                                                      sqrt(3.0) / 3.0, -1.0 / 3.0, 0.0, 2.0 / 3.0,
                                                      0.5);
   const Layout pointy_layout = Layout(pointy_orientation, {radius, radius}, {offset_x, offset_y});
   const Orientation &M = pointy_layout.orientation;
+  int t = 7;
+
+  std::vector<Tile> queue{};
+  std::unordered_set<Tile> reached{};
+  std::vector<Tile> tiles{};
+
+  int counter = 0;
+
+  queue.push_back(playerTile);
+  reached.emplace(playerTile);
 
   InitWindow(screenWidth, screenHeight, "algorithm visualizer");
-
+  double tick_time = 0.1;
+  double time = GetTime();
   SetTargetFPS(60); // Set our game to run at 60 frames-per-second
   //--------------------------------------------------------------------------------------
 
@@ -165,6 +240,38 @@ int main(void)
     BeginDrawing();
 
     ClearBackground(RAYWHITE);
+
+    if (IsKeyPressed(KEY_ENTER))
+    {
+      if (!searching)
+      {
+        while (!queue.empty())
+        {
+          auto current = queue.front();
+
+          for (const auto &t_coords : current.neighbors(map))
+          {
+            Tile &tile = map[myhash(t_coords.q, t_coords.r)];
+            if (!reached.contains(tile))
+            {
+              queue.push_back(tile);
+              reached.insert(tile);
+              tiles.push_back(tile);
+              tile.reached = true;
+            }
+          }
+          queue.erase(queue.begin());
+        }
+
+        queue = {};
+        // reached = {};
+        searching = true;
+      }
+      else
+      {
+        searching = false;
+      }
+    }
 
     if (IsMouseButtonDown(MOUSE_BUTTON_LEFT))
     {
@@ -194,12 +301,42 @@ int main(void)
       {
         DrawPoly((Vector2){hex_x + pointy_layout.origin.x, hex_y + pointy_layout.origin.y}, 6, 25, 30, GREEN);
       }
+      else if (tile.isTarget)
+      {
+        DrawPoly((Vector2){hex_x + pointy_layout.origin.x, hex_y + pointy_layout.origin.y}, 6, 25, 30, PURPLE);
+      }
       else
       {
         DrawPolyLines((Vector2){hex_x + pointy_layout.origin.x, hex_y + pointy_layout.origin.y}, 6, 25, 30, BLACK);
       }
     }
 
+    for (int i = 0; i < counter; i++)
+    {
+      auto tile = tiles[i];
+      float hex_x = (M.f0 * tile.cubeCoords.q + M.f1 * tile.cubeCoords.r) * pointy_layout.size.x;
+      float hex_y = (M.f2 * tile.cubeCoords.q + M.f3 * tile.cubeCoords.r) * pointy_layout.size.y;
+      DrawPoly((Vector2){hex_x + pointy_layout.origin.x, hex_y + pointy_layout.origin.y}, 6, 25, 30, LIGHTGRAY);
+    }
+
+    if (counter >= tiles.size())
+    {
+      counter = tiles.size();
+    }
+    else
+    {
+      if (GetTime() >= time + tick_time)
+      {
+        time = GetTime();
+        auto tile = tiles[counter];
+        float hex_x = (M.f0 * tile.cubeCoords.q + M.f1 * tile.cubeCoords.r) * pointy_layout.size.x;
+        float hex_y = (M.f2 * tile.cubeCoords.q + M.f3 * tile.cubeCoords.r) * pointy_layout.size.y;
+        DrawPoly((Vector2){hex_x + pointy_layout.origin.x, hex_y + pointy_layout.origin.y}, 6, 25, 30, LIGHTGRAY);
+        framesCounter = 0;
+        counter++;
+      }
+    }
+    framesCounter++;
     EndDrawing();
   }
 

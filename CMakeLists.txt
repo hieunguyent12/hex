@@ -3,10 +3,10 @@ project(AlgoVisualizer)
 
 find_package(raylib 3.0 REQUIRED) # Requires at least version 3.0
 
-set(CMAKE_C_STANDARD 17) # Requires C11 standard
-set(CMAKE_CXX_STANDARD 17) # Requires C11 standard
+# set(CMAKE_C_STANDARD 20) # Requires C11 standard
+set(CMAKE_CXX_STANDARD 20)
 
-add_executable(${PROJECT_NAME} main.cpp)
+add_executable(${PROJECT_NAME} main.cpp astar.cpp)
 
 target_link_libraries(${PROJECT_NAME} raylib)
 
