@@ -71,8 +71,6 @@ const std::array<CubeCoords, 6> NEIGHBORS_DIRECTIONS{
     CubeCoords(-1, 0, 1),
 };
 
-static int framesCounter = 0;
-
 size_t myhash(int q, int r);
 
 struct Tile
@@ -202,10 +200,13 @@ int main(void)
   const int width = 8;
   const int height = 8;
   const int radius = 25;
-  const int offset_x = 200;
-  const int offset_y = 100;
+  // const int offset_x = 200;
+  // const int offset_y = 100;
+  const int offset_x = 400;
+  const int offset_y = 200;
   bool searching = false;
-  auto map = createMap(0, 4, 0, 6);
+  // auto map = createMap(0, 4, 0, 6);
+  auto map = createMap(-5, 5, -6, 6);
 
   Tile &playerTile = map[myhash(0, 0)];
   Tile &targetTile = map[myhash(4, 4)];
@@ -217,13 +218,9 @@ int main(void)
                                                      0.5);
   const Layout pointy_layout = Layout(pointy_orientation, {radius, radius}, {offset_x, offset_y});
   const Orientation &M = pointy_layout.orientation;
-  int t = 7;
 
   std::vector<Tile> queue{};
   std::unordered_set<Tile> reached{};
-  std::vector<Tile> tiles{};
-
-  int counter = 0;
 
   queue.push_back(playerTile);
   reached.emplace(playerTile);
@@ -245,26 +242,6 @@ int main(void)
     {
       if (!searching)
       {
-        while (!queue.empty())
-        {
-          auto current = queue.front();
-
-          for (const auto &t_coords : current.neighbors(map))
-          {
-            Tile &tile = map[myhash(t_coords.q, t_coords.r)];
-            if (!reached.contains(tile))
-            {
-              queue.push_back(tile);
-              reached.insert(tile);
-              tiles.push_back(tile);
-              tile.reached = true;
-            }
-          }
-          queue.erase(queue.begin());
-        }
-
-        queue = {};
-        // reached = {};
         searching = true;
       }
       else
@@ -305,38 +282,45 @@ int main(void)
       {
         DrawPoly((Vector2){hex_x + pointy_layout.origin.x, hex_y + pointy_layout.origin.y}, 6, 25, 30, PURPLE);
       }
+      else if (tile.reached)
+      {
+        DrawPoly((Vector2){hex_x + pointy_layout.origin.x, hex_y + pointy_layout.origin.y}, 6, 25, 30, ORANGE);
+      }
       else
       {
         DrawPolyLines((Vector2){hex_x + pointy_layout.origin.x, hex_y + pointy_layout.origin.y}, 6, 25, 30, BLACK);
       }
     }
 
-    for (int i = 0; i < counter; i++)
-    {
-      auto tile = tiles[i];
-      float hex_x = (M.f0 * tile.cubeCoords.q + M.f1 * tile.cubeCoords.r) * pointy_layout.size.x;
-      float hex_y = (M.f2 * tile.cubeCoords.q + M.f3 * tile.cubeCoords.r) * pointy_layout.size.y;
-      DrawPoly((Vector2){hex_x + pointy_layout.origin.x, hex_y + pointy_layout.origin.y}, 6, 25, 30, LIGHTGRAY);
-    }
-
-    if (counter >= tiles.size())
-    {
-      counter = tiles.size();
-    }
-    else
+    if (searching)
     {
       if (GetTime() >= time + tick_time)
       {
         time = GetTime();
-        auto tile = tiles[counter];
+
+        if (!queue.empty())
+        {
+          auto current = queue.front();
+          for (const auto &t_coords : current.neighbors(map))
+          {
+            Tile &tile = map[myhash(t_coords.q, t_coords.r)];
+            if (!reached.contains(tile))
+            {
+              queue.push_back(tile);
+              reached.insert(tile);
+              tile.reached = true;
+            }
+          }
+          queue.erase(queue.begin());
+        }
+      }
+      for (const auto &tile : queue)
+      {
         float hex_x = (M.f0 * tile.cubeCoords.q + M.f1 * tile.cubeCoords.r) * pointy_layout.size.x;
         float hex_y = (M.f2 * tile.cubeCoords.q + M.f3 * tile.cubeCoords.r) * pointy_layout.size.y;
-        DrawPoly((Vector2){hex_x + pointy_layout.origin.x, hex_y + pointy_layout.origin.y}, 6, 25, 30, LIGHTGRAY);
-        framesCounter = 0;
-        counter++;
+        DrawPoly((Vector2){hex_x + pointy_layout.origin.x, hex_y + pointy_layout.origin.y}, 6, 25, 30, BLUE);
       }
     }
-    framesCounter++;
     EndDrawing();
   }
 
