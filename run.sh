@@ -1,4 +1,4 @@
 #!/bin/bash
 cmake --build build/
-cd build/
+cd build/src/
 ./AlgoVisualizer

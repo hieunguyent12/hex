@@ -6,9 +6,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <vector>
-
-template <typename T, std::size_t Row, std::size_t Col>
-using Array2D = std::array<std::array<T, Col>, Row>;
+#include "map.h"
 
 struct Orientation
 {
@@ -32,117 +30,20 @@ struct Layout
       : orientation(orientation_), size(size_), origin(origin_) {}
 };
 
-struct CubeCoords
-{
-  int q;
-  int r;
-  int s;
-
-  // default constructor
-  CubeCoords()
-  {
-    q = 0;
-    r = 0;
-    s = 0;
-  }
-
-  CubeCoords(int _q, int _r) : q(_q), r(_r), s(-_q - _r)
-  {
-    assert(q + r + s == 0);
-  }
-
-  CubeCoords(int _q, int _r, int _s) : q(_q), r(_r), s(_s)
-  {
-    assert(q + r + s == 0);
-  }
-
-  CubeCoords operator+(const CubeCoords &other)
-  {
-    return CubeCoords(q + other.q, r + other.r);
-  }
-};
-
-const std::array<CubeCoords, 6> NEIGHBORS_DIRECTIONS{
-    CubeCoords(0, -1, 1),
-    CubeCoords(1, -1, 0),
-    CubeCoords(1, 0, -1),
-    CubeCoords(0, 1, -1),
-    CubeCoords(-1, 1, 0),
-    CubeCoords(-1, 0, 1),
-};
-
-size_t myhash(int q, int r);
-
-struct Tile
-{
-  CubeCoords cubeCoords;
-  bool isWall;
-  bool isTarget;
-  bool isPlayer;
-  bool isPath;
-  bool reached;
-
-  bool operator==(const Tile &b) const
-  {
-    return (cubeCoords.q == b.cubeCoords.q &&
-            cubeCoords.r == b.cubeCoords.r &&
-            cubeCoords.s == b.cubeCoords.s);
-  }
-
-  // get adjacent neighbors of this tile
-  std::vector<CubeCoords> neighbors(std::unordered_map<size_t, Tile> &map)
-  {
-    std::vector<CubeCoords> n;
-
-    for (const auto &dir : NEIGHBORS_DIRECTIONS)
-    {
-      CubeCoords new_coords = cubeCoords + dir;
-      auto h = myhash(new_coords.q, new_coords.r);
-      // TODO: check if the coords are within the bounds, instead of checking of the tile exists in the map
-      if (map.count(h) > 0)
-      {
-        n.push_back(new_coords);
-      }
-    }
-
-    return n;
-  }
-};
-
-namespace std
-{
-  template <>
-  struct hash<Tile>
-  {
-    size_t operator()(const Tile &h) const
-    {
-      hash<int> int_hash;
-      size_t hq = int_hash(h.cubeCoords.q);
-      size_t hr = int_hash(h.cubeCoords.r);
-      return hq ^ (hr + 0x9e3779b9 + (hq << 6) + (hq >> 2));
-    }
-  };
-}
-
-size_t myhash(const Tile &t)
-{
-  std::hash<int> int_hash;
-  size_t hq = int_hash(t.cubeCoords.q);
-  size_t hr = int_hash(t.cubeCoords.r);
-  return hq ^ (hr + 0x9e3779b9 + (hq << 6) + (hq >> 2));
-}
-
-size_t myhash(int q, int r)
-{
-  std::hash<int> int_hash;
-  size_t hq = int_hash(q);
-  size_t hr = int_hash(r);
-  return hq ^ (hr + 0x9e3779b9 + (hq << 6) + (hq >> 2));
-}
-
-void cubeToOffset()
-{
-}
+// namespace std
+// {
+//   template <>
+//   struct hash<Tile>
+//   {
+//     size_t operator()(const Tile &h) const
+//     {
+//       hash<int> int_hash;
+//       size_t hq = int_hash(h.cubeCoords.q);
+//       size_t hr = int_hash(h.cubeCoords.r);
+//       return hq ^ (hr + 0x9e3779b9 + (hq << 6) + (hq >> 2));
+//     }
+//   };
+// }
 
 CubeCoords offsetToCube(int row, int col)
 {
@@ -172,27 +73,6 @@ CubeCoords round_fractional_hex(double q, double r)
   return CubeCoords(c_q, c_r);
 }
 
-// The article says that the top, bottom, left, and right arguments are "offset coordinates"
-// but im unsure of what that means
-std::unordered_map<size_t, Tile> createMap(int top, int bottom, int left, int right)
-{
-  std::unordered_map<size_t, Tile> map;
-  for (int r = top; r <= bottom; r++)
-  {                                // pointy top
-    int r_offset = floor(r / 2.0); // or r>>1
-    for (int q = left - r_offset; q <= right - r_offset; q++)
-    {
-      Tile t;
-      t.isTarget = false;
-      t.isWall = false;
-      t.cubeCoords = CubeCoords(q, r);
-      map[myhash(t)] = t;
-    }
-  }
-
-  return map;
-}
-
 int main(void)
 {
   const int screenWidth = 800;
@@ -203,17 +83,17 @@ int main(void)
   const int radius = 25;
   const int offset_x = 200;
   const int offset_y = 100;
-  // const int offset_x = 400;
-  // const int offset_y = 200;
   bool searching = false;
   bool foundTarget = false;
-  auto map = createMap(0, 4, 0, 6);
-  // auto map = createMap(-5, 5, -6, 6);
+  Map::createMap(0, 4, 0, 6);
 
-  Tile &playerTile = map[myhash(0, 0)];
-  Tile &targetTile = map[myhash(4, 4)];
-  playerTile.isPlayer = true;
-  targetTile.isTarget = true;
+  CubeCoords playerCoords(0, 0);
+  auto player = Map::getTile(Map::getTileId(playerCoords));
+  player->isPlayer = true;
+
+  CubeCoords targetCoords(4, 4);
+  auto target = Map::getTile(Map::getTileId(targetCoords));
+  target->isTarget = true;
 
   const Orientation pointy_orientation = Orientation(sqrt(3.0), sqrt(3.0) / 2.0, 0.0, 3.0 / 2.0,
                                                      sqrt(3.0) / 3.0, -1.0 / 3.0, 0.0, 2.0 / 3.0,
@@ -221,13 +101,13 @@ int main(void)
   const Layout pointy_layout = Layout(pointy_orientation, {radius, radius}, {offset_x, offset_y});
   const Orientation &M = pointy_layout.orientation;
 
-  std::vector<Tile> queue{};
-  std::unordered_set<Tile> reached{};
-  std::unordered_map<size_t, Tile> came_from{};
+  std::vector<Tile *> queue{};
+  std::unordered_set<Tile *> reached{};
+  std::unordered_map<size_t, Tile *> came_from{};
 
-  queue.push_back(playerTile);
-  reached.emplace(playerTile);
-  came_from[myhash(0, 0)] = {};
+  queue.push_back(player);
+  reached.emplace(player);
+  came_from[Map::getTileId(playerCoords)] = nullptr;
 
   InitWindow(screenWidth, screenHeight, "algorithm visualizer");
   double tick_time = 0.05;
@@ -261,15 +141,15 @@ int main(void)
       double r = (2.0 / 3.0) * (mousePos.y - offset_y) / radius;
 
       auto cubeCoords = round_fractional_hex(q, r);
-      auto key = myhash(cubeCoords.q, cubeCoords.r);
+      auto tile = Map::getTile(Map::getTileId(cubeCoords));
 
-      if (map.count(key) > 0)
+      if (tile)
       {
-        map[key].isWall = true;
+        tile->isWall = true;
       }
     }
 
-    for (const auto &[_, tile] : map)
+    for (const auto &[_, tile] : Map::getMap())
     {
       float hex_x = (M.f0 * tile.cubeCoords.q + M.f1 * tile.cubeCoords.r) * pointy_layout.size.x;
       float hex_y = (M.f2 * tile.cubeCoords.q + M.f3 * tile.cubeCoords.r) * pointy_layout.size.y;
@@ -310,15 +190,15 @@ int main(void)
         if (!queue.empty())
         {
           auto current = queue.front();
-          for (const auto &t_coords : current.neighbors(map))
+          for (const auto tile : current->getNeighbors())
           {
-            Tile &tile = map[myhash(t_coords.q, t_coords.r)];
-            if (came_from.count(myhash(tile.cubeCoords.q, tile.cubeCoords.r)) <= 0 && !tile.isWall)
+            auto id = Map::getTileId(tile->cubeCoords);
+            if (came_from.count(id) <= 0 && !tile->isWall)
             {
               queue.push_back(tile);
               reached.insert(tile);
-              tile.reached = true;
-              came_from[myhash(tile.cubeCoords.q, tile.cubeCoords.r)] = current;
+              tile->reached = true;
+              came_from[id] = current;
             }
           }
           queue.erase(queue.begin());
@@ -327,31 +207,30 @@ int main(void)
         {
           if (!foundTarget)
           {
-            std::vector<Tile> path{};
+            std::vector<Tile *> path{};
 
-            size_t current = myhash(4, 4); // start from the target tile and go backwards from there
-            while (current != myhash(0, 0))
+            size_t current = Map::getTileId(targetCoords); // start from the target tile and go backwards from there
+            while (current != Map::getTileId(playerCoords))
             {
               path.push_back(came_from[current]);
-              current = myhash(came_from[current].cubeCoords.q, came_from[current].cubeCoords.r);
+              current = Map::getTileId(came_from[current]->cubeCoords);
             }
             foundTarget = true;
 
             if (foundTarget)
             {
-              for (const auto &t : path)
+              for (const auto t : path)
               {
-                auto key = myhash(t.cubeCoords.q, t.cubeCoords.r);
-                map[key].isPath = true;
+                t->isPath = true;
               }
             }
           }
         }
       }
-      for (const auto &tile : queue)
+      for (const auto tile : queue)
       {
-        float hex_x = (M.f0 * tile.cubeCoords.q + M.f1 * tile.cubeCoords.r) * pointy_layout.size.x;
-        float hex_y = (M.f2 * tile.cubeCoords.q + M.f3 * tile.cubeCoords.r) * pointy_layout.size.y;
+        float hex_x = (M.f0 * tile->cubeCoords.q + M.f1 * tile->cubeCoords.r) * pointy_layout.size.x;
+        float hex_y = (M.f2 * tile->cubeCoords.q + M.f3 * tile->cubeCoords.r) * pointy_layout.size.y;
         DrawPoly((Vector2){hex_x + pointy_layout.origin.x, hex_y + pointy_layout.origin.y}, 6, 25, 30, BLUE);
       }
     }
