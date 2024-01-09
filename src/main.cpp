@@ -6,6 +6,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <vector>
+#include <queue>
 #include "map.h"
 
 struct Orientation
@@ -73,6 +74,22 @@ CubeCoords round_fractional_hex(double q, double r)
   return CubeCoords(c_q, c_r);
 }
 
+int tile_length(Tile &tile)
+{
+  return int((abs(tile.cubeCoords.q) + abs(tile.cubeCoords.r) + abs(tile.cubeCoords.s)) / 2);
+}
+
+int tile_distance(Tile &a, Tile &b)
+{
+  Tile t(CubeCoords(a.cubeCoords.q - b.cubeCoords.q, a.cubeCoords.r - b.cubeCoords.r, a.cubeCoords.s - b.cubeCoords.s));
+  return tile_length(t);
+}
+
+int heuristic(Tile &start, Tile &goal)
+{
+  return tile_distance(start, goal);
+}
+
 int main(void)
 {
   const int screenWidth = 800;
@@ -101,13 +118,19 @@ int main(void)
   const Layout pointy_layout = Layout(pointy_orientation, {radius, radius}, {offset_x, offset_y});
   const Orientation &M = pointy_layout.orientation;
 
+  typedef std::pair<double, Tile *> PQElement;
+  std::priority_queue<PQElement, std::vector<PQElement>, std::greater<PQElement>> priority_queue;
+
   std::vector<Tile *> queue{};
   std::unordered_set<Tile *> reached{};
   std::unordered_map<size_t, Tile *> came_from{};
+  std::unordered_map<size_t, int> costs{};
 
+  priority_queue.emplace(0, player);
   queue.push_back(player);
   reached.emplace(player);
   came_from[Map::getTileId(playerCoords)] = nullptr;
+  costs[Map::getTileId(playerCoords)] = 0;
 
   InitWindow(screenWidth, screenHeight, "algorithm visualizer");
   double tick_time = 0.05;
@@ -149,6 +172,22 @@ int main(void)
       }
     }
 
+    if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT))
+    {
+      Vector2 mousePos = GetMousePosition();
+      double q = (sqrt(3) / 3 * (mousePos.x - offset_x) - (1.0 / 3.0 * (mousePos.y - offset_y))) / radius;
+      double r = (2.0 / 3.0) * (mousePos.y - offset_y) / radius;
+
+      auto cubeCoords = round_fractional_hex(q, r);
+      auto tile = Map::getTile(Map::getTileId(cubeCoords));
+
+      if (tile)
+      {
+        tile->isRiver = true;
+        tile->cost = 5;
+      }
+    }
+
     for (const auto &[_, tile] : Map::getMap())
     {
       float hex_x = (M.f0 * tile.cubeCoords.q + M.f1 * tile.cubeCoords.r) * pointy_layout.size.x;
@@ -165,6 +204,10 @@ int main(void)
       else if (tile.isTarget)
       {
         DrawPoly((Vector2){hex_x + pointy_layout.origin.x, hex_y + pointy_layout.origin.y}, 6, 25, 30, PURPLE);
+      }
+      else if (tile.isRiver)
+      {
+        DrawPoly((Vector2){hex_x + pointy_layout.origin.x, hex_y + pointy_layout.origin.y}, 6, 25, 30, LIGHTGRAY);
       }
       else if (tile.isPath)
       {
@@ -187,52 +230,77 @@ int main(void)
       {
         time = GetTime();
 
-        if (!queue.empty())
+        if (!priority_queue.empty() && !foundTarget)
         {
-          auto current = queue.front();
-          for (const auto tile : current->getNeighbors())
+          auto current = priority_queue.top().second;
+          auto current_id = Map::getTileId(current->cubeCoords);
+          if (current == target)
           {
-            auto id = Map::getTileId(tile->cubeCoords);
-            if (came_from.count(id) <= 0 && !tile->isWall)
-            {
-              queue.push_back(tile);
-              reached.insert(tile);
-              tile->reached = true;
-              came_from[id] = current;
-            }
+            foundTarget = true;
           }
-          queue.erase(queue.begin());
+          else
+          {
+            for (const auto tile : current->getNeighbors())
+            {
+              auto id = Map::getTileId(tile->cubeCoords);
+
+              int newCost = costs[current_id] + (Map::getTile(id)->cost);
+              if ((costs.find(id) == costs.end() || (newCost < costs[id])) && !tile->isWall)
+              {
+                costs[id] = newCost;
+                // queue.push_back(tile);
+                priority_queue.emplace(newCost + heuristic(*target, *Map::getTile(id)), tile);
+                reached.insert(tile);
+                tile->reached = true;
+                came_from[id] = current;
+              }
+            }
+            priority_queue.pop();
+            // queue.erase(queue.begin());
+          }
         }
         else
         {
-          if (!foundTarget)
+          std::vector<Tile *> path{};
+
+          size_t current = Map::getTileId(targetCoords); // start from the target tile and go backwards from there
+          while (current != Map::getTileId(playerCoords))
           {
-            std::vector<Tile *> path{};
+            path.push_back(came_from[current]);
+            current = Map::getTileId(came_from[current]->cubeCoords);
+          }
 
-            size_t current = Map::getTileId(targetCoords); // start from the target tile and go backwards from there
-            while (current != Map::getTileId(playerCoords))
-            {
-              path.push_back(came_from[current]);
-              current = Map::getTileId(came_from[current]->cubeCoords);
-            }
-            foundTarget = true;
-
-            if (foundTarget)
-            {
-              for (const auto t : path)
-              {
-                t->isPath = true;
-              }
-            }
+          for (const auto t : path)
+          {
+            t->isPath = true;
           }
         }
       }
-      for (const auto tile : queue)
+
+      std::vector<std::pair<double, Tile *>> temp;
+
+      while (!priority_queue.empty())
       {
+        auto p = priority_queue.top();
+        auto tile = priority_queue.top().second;
         float hex_x = (M.f0 * tile->cubeCoords.q + M.f1 * tile->cubeCoords.r) * pointy_layout.size.x;
         float hex_y = (M.f2 * tile->cubeCoords.q + M.f3 * tile->cubeCoords.r) * pointy_layout.size.y;
         DrawPoly((Vector2){hex_x + pointy_layout.origin.x, hex_y + pointy_layout.origin.y}, 6, 25, 30, BLUE);
+        priority_queue.pop();
+        temp.push_back(p);
       }
+
+      for (auto &t : temp)
+      {
+        priority_queue.emplace(t);
+      }
+
+      // for (const auto tile : priority_queue)
+      // {
+      //   float hex_x = (M.f0 * tile->cubeCoords.q + M.f1 * tile->cubeCoords.r) * pointy_layout.size.x;
+      //   float hex_y = (M.f2 * tile->cubeCoords.q + M.f3 * tile->cubeCoords.r) * pointy_layout.size.y;
+      //   DrawPoly((Vector2){hex_x + pointy_layout.origin.x, hex_y + pointy_layout.origin.y}, 6, 25, 30, BLUE);
+      // }
     }
     EndDrawing();
   }

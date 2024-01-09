@@ -19,7 +19,9 @@ Tile::Tile(CubeCoords cc) : cubeCoords(cc),
                             isTarget(false),
                             isPlayer(false),
                             isPath(false),
-                            reached(false)
+                            isRiver(false),
+                            reached(false),
+                            cost(1)
 {
 }
 
@@ -28,12 +30,16 @@ Tile::Tile(CubeCoords cc,
            bool _isTarget,
            bool _isPlayer,
            bool _isPath,
-           bool _reached) : cubeCoords(cc),
-                            isWall(_isWall),
-                            isTarget(_isTarget),
-                            isPlayer(_isPlayer),
-                            isPath(_isPath),
-                            reached(_reached)
+           bool _isRiver,
+           bool _reached,
+           int _cost) : cubeCoords(cc),
+                        isWall(_isWall),
+                        isTarget(_isTarget),
+                        isPlayer(_isPlayer),
+                        isPath(_isPath),
+                        isRiver(_isRiver),
+                        reached(_reached),
+                        cost(_cost)
 {
 }
 

@@ -10,9 +10,13 @@ public:
   bool isTarget;
   bool isPlayer;
   bool isPath;
+  bool isRiver;
   bool reached;
+  int cost;
 
-  Tile(CubeCoords cc, bool isWall, bool isTarget, bool isPlayer, bool isPath, bool reached);
+  Tile(CubeCoords cc, bool isWall, bool isTarget, bool isPlayer, bool isPath, bool isRiver,
+       bool reached,
+       int cost);
   Tile(CubeCoords cc);
   Tile();
 
